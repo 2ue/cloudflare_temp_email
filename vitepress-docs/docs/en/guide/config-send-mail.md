@@ -22,6 +22,44 @@ Each `/api/send_mail` request matches channels in order; **the first hit sends**
 > [!NOTE]
 > Binding send failures return an error directly.
 
+## Multiple Providers with Failover (`MAIL_PROVIDERS`)
+
+When `MAIL_PROVIDERS` is set, layers 2–4 above are replaced by trying several providers in priority order (layer 1, the verified address list, is unchanged):
+
+- Lower `priority` is tried first; ties keep configuration order
+- Quota exhaustion, rate limiting, 5xx, network timeouts, invalid keys or unverified domains: fail over to the next provider
+- **Permanent errors** such as an invalid recipient: fail immediately without trying other providers, to avoid duplicate delivery
+- Providers that reached their local `dailyLimit` / `monthlyLimit` are skipped (UTC day/month; `0` or unset means unlimited)
+
+```json
+[
+  { "name": "resend", "type": "resend", "priority": 1, "apiKey": "re_xxx", "dailyLimit": 100, "monthlyLimit": 3000 },
+  { "name": "brevo", "type": "brevo", "priority": 2, "apiKey": "xkeysib-xxx", "dailyLimit": 300 },
+  { "name": "backup-smtp", "type": "smtp", "priority": 3, "domains": ["mail.example.com"],
+    "smtp": { "host": "smtp.example.com", "port": 465, "secure": true, "authType": ["plain", "login"],
+              "credentials": { "username": "user", "password": "pass" } } }
+]
+```
+
+| Field | Description |
+|-------|-------------|
+| `name` | Unique name used for usage counters and logs |
+| `type` | `resend` (API), `brevo` (API v3), `smtp` (worker-mailer), `binding` (Cloudflare `SEND_MAIL`) |
+| `priority` | Lower is tried first |
+| `enabled` | Set `false` to disable temporarily |
+| `domains` | Only used for these sender domains; empty means all |
+| `dailyLimit` / `monthlyLimit` | Local caps; the provider is skipped once reached |
+| `apiKey` | Required for `resend` and `brevo` |
+| `baseUrl` | Optional API base URL override (proxy or testing) |
+| `smtp` | Required for `smtp`; same shape as one `SMTP_CONFIG` entry |
+
+Store it as a secret: `wrangler secret put MAIL_PROVIDERS`.
+
+Every real attempt is written to the D1 table `mail_provider_log`, and successes are counted per provider in `mail_provider_usage` (tables are created on first use, or run `db/2026-10-27-mail-providers.sql`). Admin endpoints:
+
+- `GET /admin/mail_providers?remote=true`: provider config (secrets redacted) and local daily/monthly usage; with `remote=true`, provider-side quota (Brevo via `/v3/account`, Resend from the `x-resend-*-quota` headers of the last send)
+- `GET /admin/mail_providers/logs?limit=20&offset=0&provider=resend`: send attempt log
+
 ## Using the Cloudflare `send_email` Binding (Recommended)
 
 Only available when deploying via CLI. Add to `wrangler.toml`:

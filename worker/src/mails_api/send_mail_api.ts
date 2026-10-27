@@ -11,6 +11,7 @@ import { GeoData } from '../models'
 import { handleListQuery, isSendMailBindingEnabled, updateAddressUpdatedAt } from '../common'
 import { getSendBalanceState, requestSendMailAccess } from './send_balance';
 import { ensureSendMailLimit, increaseSendMailLimitCount } from './send_mail_limit_utils';
+import { hasMailProviders, sendMailWithProviders } from './mail_providers';
 
 
 export const api = new Hono<HonoCustomType>()
@@ -197,6 +198,18 @@ export const sendMail = async (
     // send mail workflow
     if (sendByVerifiedAddressList) {
         // do not update balance
+    }
+    // MAIL_PROVIDERS 已配置：按优先级发信，额度用尽或失败时自动换下一家
+    else if (hasMailProviders(c)) {
+        await sendMailWithProviders(c, {
+            fromAddress: address,
+            fromName: from_name || "",
+            toMail: to_mail,
+            toName: to_name || "",
+            subject,
+            content,
+            isHtml: !!is_html,
+        }, mailDomain);
     }
     // send by resend
     else if (resendEnabled) {

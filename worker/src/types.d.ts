@@ -105,6 +105,9 @@ type Bindings = {
     SMTP_CONFIG: string | object | undefined
     SEND_MAIL_DOMAINS: string | string[] | undefined
 
+    // 多发信服务商：按 priority 依次尝试，额度用尽或失败时换下一家（配置后优先于 RESEND_TOKEN / SMTP_CONFIG）
+    MAIL_PROVIDERS: string | object[] | undefined
+
     // telegram config
     TELEGRAM_BOT_TOKEN: string
     TG_MAX_ADDRESS: number | undefined

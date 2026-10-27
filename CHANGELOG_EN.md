@@ -10,6 +10,8 @@
 
 ### Features
 
+- feat: |Send Mail| Add `MAIL_PROVIDERS` for multiple send providers (Resend / Brevo / SMTP / binding) tried in priority order, automatically failing over on quota exhaustion or errors; per-provider daily/monthly usage and send logs, with admin endpoints for usage queries
+
 ### Bug Fixes
 
 - fix: |Telegram| Clean up the current push recipient's binding and push mapping before admin mailbox deletion, freeing a slot and preventing stale pushes on recreation; KV cleanup failures preserve the mailbox for retry, while database deletion failures may leave it unbound

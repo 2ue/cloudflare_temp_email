@@ -22,6 +22,44 @@ Workers Paid 每月含 3,000 封，超出部分 $0.35 / 1000 封。
 > [!NOTE]
 > binding 发信失败会直接报错。
 
+## 多发信服务商与自动切换（`MAIL_PROVIDERS`）
+
+配置 `MAIL_PROVIDERS` 后，上表第 2～4 层改为按优先级依次尝试多个服务商（第 1 层已验证地址列表不变）：
+
+- `priority` 越小越优先，相同时按配置顺序
+- 额度用尽、限流、5xx、网络超时、密钥或域名未验证：自动换下一家
+- 收件人地址无效等**永久错误**：直接报错，不再换服务商，避免同一封信被多家重复发送
+- 达到本地 `dailyLimit` / `monthlyLimit` 的服务商会被跳过（按 UTC 日、月计数，`0` 或不填表示不限）
+
+```json
+[
+  { "name": "resend", "type": "resend", "priority": 1, "apiKey": "re_xxx", "dailyLimit": 100, "monthlyLimit": 3000 },
+  { "name": "brevo", "type": "brevo", "priority": 2, "apiKey": "xkeysib-xxx", "dailyLimit": 300 },
+  { "name": "backup-smtp", "type": "smtp", "priority": 3, "domains": ["mail.example.com"],
+    "smtp": { "host": "smtp.example.com", "port": 465, "secure": true, "authType": ["plain", "login"],
+              "credentials": { "username": "user", "password": "pass" } } }
+]
+```
+
+| 字段 | 说明 |
+|------|------|
+| `name` | 唯一名称，用于统计与日志 |
+| `type` | `resend`（API）、`brevo`（API v3）、`smtp`（worker-mailer）、`binding`（Cloudflare `SEND_MAIL`） |
+| `priority` | 优先级，越小越先用 |
+| `enabled` | 设为 `false` 临时停用 |
+| `domains` | 仅对这些发件域名生效，留空表示所有域名 |
+| `dailyLimit` / `monthlyLimit` | 本地额度上限，达到后跳过 |
+| `apiKey` | `resend`、`brevo` 必填 |
+| `baseUrl` | 可选，覆盖 API 地址（自建代理或测试） |
+| `smtp` | `smtp` 必填，格式同 `SMTP_CONFIG` 的单个域名配置 |
+
+建议以 secret 方式保存：`wrangler secret put MAIL_PROVIDERS`。
+
+每次实际尝试都会写入 D1 表 `mail_provider_log`，成功次数按服务商累计到 `mail_provider_usage`（首次使用自动建表，也可执行 `db/2026-10-27-mail-providers.sql`）。管理接口：
+
+- `GET /admin/mail_providers?remote=true`：各服务商配置（密钥已脱敏）、本地日/月用量；`remote=true` 时附带服务商侧余量（Brevo 查询 `/v3/account`，Resend 读取最近一次发信的 `x-resend-*-quota` 响应头）
+- `GET /admin/mail_providers/logs?limit=20&offset=0&provider=resend`：发信尝试记录
+
 ## 使用 Cloudflare `send_email` binding（推荐）
 
 仅 CLI 部署时使用，在 `wrangler.toml` 中添加：

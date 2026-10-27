@@ -19,6 +19,7 @@ import ip_blacklist_settings from './ip_blacklist_settings'
 import ai_extract_settings from './ai_extract_settings'
 import config_api from './config_api'
 import redeem_code_api from '../redeem_api/admin_redeem_code_api'
+import mail_providers_api from './mail_providers_api'
 
 export const api = new Hono<HonoCustomType>()
 
@@ -92,6 +93,10 @@ api.get('/admin/worker/configs', worker_config.getConfig)
 // send mail by admin
 api.post('/admin/send_mail', sendMailbyAdmin)
 api.post('/admin/send_mail_by_binding', sendMailByBindingAdmin)
+
+// mail providers: priority failover status, usage and send logs
+api.get('/admin/mail_providers', mail_providers_api.status)
+api.get('/admin/mail_providers/logs', mail_providers_api.logs)
 
 // db api
 api.get('admin/db_version', db_api.getVersion)
